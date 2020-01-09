@@ -1,2 +1,2 @@
 # diplomatiki
-A Uniﬁed Novel Neural Network Approach for EEG Classiﬁcation 
+A Deep Machine Learning architecture for filtering and Classification of Motor Imagery EEG data 
