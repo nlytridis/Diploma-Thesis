@@ -157,7 +157,7 @@ class SCRATCH_NNET(BaseEstimator, TransformerMixin):
                 else:   
                     x[i][l]=X_channel[i][:,(int(time/self.nn_segments*l-(overlap/2+q))):int(time/self.nn_segments*(l+1)+overlap/2)]
 
-        #x=np.asarray(x)
+        x=np.asarray(x)
         #---end Segment split----------------
         
         #Initialize W0
@@ -526,8 +526,8 @@ def load_BCICIV():
     X_train, X_test = epoch_scaling(X_train, X_test)
     return  X_train, X_test, y_train, y_test
 
-def load_Giga_DB():
-    mat = sio.loadmat("s05.mat")
+def load_Giga_DB( mat ):
+    #mat = sio.loadmat(subject)
     #Import MI Data
     x_left = mat['eeg']['imagery_left'][0][0]
     x_right = mat['eeg']['imagery_right'][0][0]   
@@ -561,7 +561,37 @@ def main():
     X_test1=np.swapaxes(X_test1, 2,1)
     X_train2, X_test2, y_train2, y_test2 = load_BCICIV()
     
-    X_train3, X_test3, y_train3, y_test3 = load_Giga_DB()
+    import os
+
+    dataDir = "GigaDB/"
+    mats = []
+    for file in os.listdir( dataDir ) :
+        mats.append( sio.loadmat( dataDir+file ) )
+        
+    acc = np.zeros(52)
+    for i in list(range(52)):
+        X_train, X_test, y_train, y_test = load_Giga_DB(mats[i])
+        net = SCRATCH_NNET(batch_size=10,nn_segments=4,per_seg_hdim=3,overlap_ratio=.0, epsilon = 0.001, reg_lambda = 0.1, num_passes=100)
+        net.fit(X_train, y_train)
+        preds=net.predict(X_test)
+        acc[i]=accuracy_score(y_test, preds)
+        
+    acc_clfLR = np.zeros(52)    
+    for i in list(range(52)):
+        X_train, X_test, y_train, y_test = load_Giga_DB(mats[i])
+        filt_csp, _, _, =calculate_csp(X_train,y_train)
+        X_train_flat = apply_csp(X_train, filt_csp, componets=1)
+        X_test_flat = apply_csp(X_test,   filt_csp, componets=1) 
+        clf=LogisticRegression('l1')
+        X_train_flat = np.reshape(X_train, (X_train.shape[0],X_train.shape[1]*X_train.shape[2] )   )
+        X_test_flat = np.reshape(X_test, (X_test.shape[0],X_test.shape[1]*X_test.shape[2] )   )
+        clf.fit(X_train_flat,  y_train)
+        preds_clf = clf.predict(X_test_flat)
+        acc_clfLR[i] = accuracy_score(y_test, preds_clf)
+        #print("--->The accuracy of the CSP + LR for GigaDB sub%d is %f "%(i,  acc_clf))
+
+    
+    X_train3, X_test3, y_train3, y_test3 = load_Giga_DB(s05)
     
     
     filt_csp1, _, _, =calculate_csp(X_train1,y_train1)
@@ -615,6 +645,10 @@ def main():
     preds=net.predict(X_test3)
     acc=accuracy_score(y_test3, preds)
     print("--->The accuracy of the net is %f " % acc)
+    
+    
+    
+    
     
     
 if __name__ == "__main__":
