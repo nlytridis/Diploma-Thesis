@@ -157,6 +157,12 @@ class SCRATCH_NNET(BaseEstimator, TransformerMixin):
                 else:   
                     x[i][l]=X_channel[i][:,(int(time/self.nn_segments*l-(overlap/2+q))):int(time/self.nn_segments*(l+1)+overlap/2)]
 
+#        if(x[0][0].shape!=x[0][1]):# Zero filling if needed to convert list to np.array
+#            zero_fil = np.zeros((X.shape[0],1))
+#            for i in list(range(X.shape[1] )):
+#                x[i][0] = np.concatenate((x[i][0],zero_fil),axis=1)
+
+        
         x=np.asarray(x)
         #---end Segment split----------------
         
@@ -492,8 +498,8 @@ def load_cichocki():
     return  X_train, X_test, y_train, y_test
 
 
-def load_BCICIV():
-    mat = sio.loadmat("BCICIV_calib_ds1g.mat")
+def load_BCICIV(mat):
+#    mat = sio.loadmat("BCICIV_calib_ds1g.mat")
     cnt = mat['cnt']
     pos = mat['mrk']['pos']
     pos = pos[0][0][:]
@@ -510,24 +516,24 @@ def load_BCICIV():
     for i in list(range(trials)):
         if y[i]<0: y[i] = 0
         
-    eeg_mean = cnt.mean()     
-    cnt = np.subtract(cnt,eeg_mean)
-  
-    fcnt = butter_bandpass_filter(cnt, 7, 30, 256, order=5)
-
-    X = np.zeros((trials,time_step,channels))
+#    eeg_mean = cnt.mean()     
+#    cnt = np.subtract(cnt,eeg_mean)
+#  
+#    fcnt = butter_bandpass_filter(cnt, 7, 30, 256, order=5)
+#
+    X = np.ones((trials,time_step,channels))
     
     for i in list(range(trials)):
-        X[i] = fcnt [ pos[i] : (pos[i] + time_step),:]  
+        X[i] = cnt [ pos[i] : (pos[i] + time_step),:]  
                 
     from sklearn.model_selection import train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.1,)
     
     X_train, X_test = epoch_scaling(X_train, X_test)
     return  X_train, X_test, y_train, y_test
 
 def load_Giga_DB( mat ):
-    #mat = sio.loadmat(subject)
+    #mat = sio.loadmat("GigaDB2/s50.mat")
     #Import MI Data
     x_left = mat['eeg']['imagery_left'][0][0]
     x_right = mat['eeg']['imagery_right'][0][0]   
@@ -546,48 +552,56 @@ def load_Giga_DB( mat ):
     y_right = np.zeros(trials)
 
     X,y = np.concatenate((x_left, x_right) , axis = 0), np.concatenate((y_left, y_right))
-   
+#    
+#    eeg_mean = X.mean()     
+#    X = np.subtract(X,eeg_mean)
+  
+#    X = butter_bandpass_filter(X, 7, 30, 256, order=5)
                 
     from sklearn.model_selection import train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.1)
     
     X_train, X_test = epoch_scaling(X_train, X_test)
     return  X_train, X_test, y_train, y_test
 
 
 def main():
-    X_train1, X_test1, y_train1, y_test1 = load_cichocki()
-    X_train1=np.swapaxes(X_train1, 2,1)
-    X_test1=np.swapaxes(X_test1, 2,1)
-    X_train2, X_test2, y_train2, y_test2 = load_BCICIV()
-    
+
     import os
 
-    dataDir = "GigaDB/"
+    dataDir = "GigaDB4/"
+   # dataDir = "BCICIV/"
     mats = []
     for file in os.listdir( dataDir ) :
         mats.append( sio.loadmat( dataDir+file ) )
         
-    acc = np.zeros(52)
-    for i in list(range(52)):
-        X_train, X_test, y_train, y_test = load_Giga_DB(mats[i])
-        net = SCRATCH_NNET(batch_size=10,nn_segments=4,per_seg_hdim=3,overlap_ratio=.0, epsilon = 0.001, reg_lambda = 0.1, num_passes=100)
-        net.fit(X_train, y_train)
-        preds=net.predict(X_test)
-        acc[i]=accuracy_score(y_test, preds)
+    acc = np.zeros((14,1))
+    for i in list(range(14)):   
+        for j in list(range(1)):
+            X_train, X_test, y_train, y_test = load_Giga_DB(mats[i])
+#            X_train, X_test, y_train, y_test = load_BCICIV( mats[0])
+            net = SCRATCH_NNET(batch_size=10,nn_segments=2,per_seg_hdim=1,overlap_ratio=0.5, epsilon = 0.15, reg_lambda = 0.1, num_passes=100)
+            net.fit(X_train, y_train)
+            preds=net.predict(X_test)
+            acc[i,j]=accuracy_score(y_test, preds)
         
-    acc_clfLR = np.zeros(52)    
-    for i in list(range(52)):
-        X_train, X_test, y_train, y_test = load_Giga_DB(mats[i])
-        filt_csp, _, _, =calculate_csp(X_train,y_train)
-        X_train_flat = apply_csp(X_train, filt_csp, componets=1)
-        X_test_flat = apply_csp(X_test,   filt_csp, componets=1) 
-        clf=LogisticRegression('l1')
-        X_train_flat = np.reshape(X_train, (X_train.shape[0],X_train.shape[1]*X_train.shape[2] )   )
-        X_test_flat = np.reshape(X_test, (X_test.shape[0],X_test.shape[1]*X_test.shape[2] )   )
-        clf.fit(X_train_flat,  y_train)
-        preds_clf = clf.predict(X_test_flat)
-        acc_clfLR[i] = accuracy_score(y_test, preds_clf)
+    acc_clfLR = np.zeros((7,10))    
+ 
+    for i in list(range(7)):
+        for j in list(range(10)):
+#            X_train, X_test, y_train, y_test = load_BCICIV( mats[6])
+            X_train, X_test, y_train, y_test = load_Giga_DB(mats[0])
+#            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.1)
+            
+            filt_csp, _, _, =calculate_csp(X_train,y_train)
+            X_train_flat = apply_csp(X_train, filt_csp, componets=1)
+            X_test_flat = apply_csp(X_test,   filt_csp, componets=1) 
+            clf=LogisticRegression('l1')
+            X_train_flat = np.reshape(X_train, (X_train.shape[0],X_train.shape[1]*X_train.shape[2] )   )
+            X_test_flat = np.reshape(X_test, (X_test.shape[0],X_test.shape[1]*X_test.shape[2] )   )
+            clf.fit(X_train_flat,  y_train)
+            preds_clf = clf.predict(X_test_flat)
+            acc_clfLR[4,j] = accuracy_score(y_test, preds_clf)
         #print("--->The accuracy of the CSP + LR for GigaDB sub%d is %f "%(i,  acc_clf))
 
     
