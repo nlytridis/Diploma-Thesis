@@ -1,5 +1,4 @@
-# A Deep Machine Learning Architecture 
-for Filtering and Classification of Motor Imagery EEG Data
+# A Deep Machine Learning Architecture for Filtering and Classification of Motor Imagery EEG Data
 
 ## Diploma Thesis
 Author: Nikos Lytridis
